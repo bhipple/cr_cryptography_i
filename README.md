@@ -1,7 +1,7 @@
 # Stanford Cryptography I
 Notes for the [Stanford Cryptography Course](https://www.coursera.org/learn/crypto) on coursera.
 
-## Week 1: Overview
+## Week 1: Overview and Stream Ciphers
 ### What is Cryptography All About?
 * Cryptography consists of 2 core parts:
     - Establish and exchange a secure key
@@ -75,3 +75,18 @@ Symmetric Ciphers: both Alice (the encrypter) and Bob (the decrypter) use the sa
 * Semantic Security for a one-time key
     - An adversary emits two messages, m1 and m2, which are encrypted with the algorithm. If the adversary is able to guess which message comes out given the encrypted text, the algorithm does not have semantic security.
     - This is a weaker definition than perfect security, because it requires the adversary to have an efficient algorithm to crack.
+
+## Week 2: Block Ciphers
+* Examples: 3DES and AES
+* Block Ciphers are built by iteration
+    - The key is expanded into n keys
+    - The messages is encrypted by k 'round functions' `R(k, m)` to produce the resulting cipher `c`
+* A Pseudo-Random Function (PRF) defined over `(K, X, Y)` is a function `f:  K x Y -> Y` such that an efficient algorithm exists to evaluate `F(k, x)`
+* A Pseudo-Random Permutation (PRP) defined over `(K, X)` is `E: K x X -> X` such that
+    - There exists an efficient deterministic algorithm to evaluated `E(k, x)`
+    - The function `E(k, *)` is one-to-one
+    - There exists an efficient inversion algorithm `D(k, y)`
+    - Note that this is a subset of PRFs
+    - 3DES and AES are PRPs
+* A PRF is *secure* if an adversary cannot tell the difference from a truly random PRF, with only some neglibigle advantage
+    - Same adversary -> input -> output -> can you tell the difference? test as before
