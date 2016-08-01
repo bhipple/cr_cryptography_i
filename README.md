@@ -81,6 +81,7 @@ Symmetric Ciphers: both Alice (the encrypter) and Bob (the decrypter) use the sa
 * Block Ciphers are built by iteration
     - The key is expanded into n keys
     - The messages is encrypted by k 'round functions' `R(k, m)` to produce the resulting cipher `c`
+    - The specifications to a block cipher are the key expansion function, the round function, the key size, and the round count
 * A Pseudo-Random Function (PRF) defined over `(K, X, Y)` is a function `f:  K x Y -> Y` such that an efficient algorithm exists to evaluate `F(k, x)`
 * A Pseudo-Random Permutation (PRP) defined over `(K, X)` is `E: K x X -> X` such that
     - There exists an efficient deterministic algorithm to evaluated `E(k, x)`
@@ -90,3 +91,57 @@ Symmetric Ciphers: both Alice (the encrypter) and Bob (the decrypter) use the sa
     - 3DES and AES are PRPs
 * A PRF is *secure* if an adversary cannot tell the difference from a truly random PRF, with only some neglibigle advantage
     - Same adversary -> input -> output -> can you tell the difference? test as before
+* Data Encryption Standard (DES)
+    - Feistel Network
+        * We map a 2n-bit input to a 2n-bit output
+        * `Ri = Fi(Ri-1) xor Li, Li = Ri-1 for i in [1..d]`, where `d` is the number of rounds
+        * The only difference between the encryption and decryption circuits is the order in which the functions are applied
+    - 16 round Feistel Network on 64-bit blocks (2 * 32)
+* Exhaustive Search Attacks
+    - Goal: given input output pairs `(m_i, c_i = E(k, m_i)) for i = 1,..3`, find the key `k`
+    - 3DES increases the space size to protect against exhaustive search
+    - "Double" DES was not proposed because it is vulnerable to "meet in the middle" attacks
+* More sophisticated attacks
+    - Side channel attacks
+        * Measuring the time to do enc/dec and the power while doing so can expose the key
+    - Fault attacks
+        * Computing errors in the last round can expose the secrete key `k`
+    - Linear and differential attacks
+    - Quantum attacks
+* Advanced Encyrption Standard (AES) Block Cipher
+    - Substitution-Permutation Network
+        * Similar to Feistel Network, but all bits changed in every round (as opposed to half)
+        * Round: xor with round key, go through block substitution phase, permutation layer, repeat
+    - Contains nice tradeoff configurations between code size and performance and security
+        * Pre-compute the round function tables vs. calculate them as-needed
+* Block Ciphers from PRGs
+    - GGM PRF: Let `G: K -> K^2`.  Define `PRF F: K x {0,1}^n -> K` as the sequence of applying G to k and using either the left or right output depending on the ith bit of k.
+        * If G is a secure PRG, then F is a secure PRF on `{0,1}^n`
+        * Not used in practice due to slow performance
+* Using Block Ciphers
+    - PRF Switching Lemma: Any secure PRP is also a secure PRF, if |X| is sufficiently large (~2^128)
+        * Let E be a PRP over `(K, X)`.  Then  for any q-eury adversary A, `|Adv_prf[A,E] - Adv_prp[A,E]| < q^2 / (2*|X|)`
+    - One Time Key
+        * Deterministic Counter Mode
+            - Builds a stream cipher out of the block cipher
+    - Many-time Key
+        * Semantic security: adversary gets to mount a chosen-plaintext attack (CPA) in which he obtains the encryption of arbitrary messages of his choice
+            - After getting back the first encrypted message, adversary can choose a new plaintext to query the challenger with and get the next encryption.
+            - In any given experiment, adversary will always get either the encryption of the left message or of the right message
+            - Deterministic encryption cannot be secure under chosen-plaintext attacks!
+                * i.e. if an encryption scheme always emits the same cipher text for the same message the attack has advantage 1
+        * Randomized Encryption
+            - We use some random bits to influence the generator each time, and those bits are encoded into the cipher to make the decryption invertible
+            - Solves our problem, but increases size of cipher
+        * Nonce-based Encryption
+            - (k, n) pair never repeats, so we get the effect of having new keys each time.
+            - The nonce need not be secret!
+        * Cipher Block Chaining with Random Initialization Vector (IV)
+            - For the ith message text, we use `c_i = (IV_i, E(k, m_i xor IV_i))`
+        * Cipher Block Chaining with Nonce
+            - We take a nonce and a pair of keys `(k, k1)` and encrypt the nonce with `k1`, then use the algorithm as before with the encrypted nonce as our IV
+            - Nonce must be unique: `(key, nonce)` pair is used for only one message
+        * Randomized Counter Mode
+            - Choose a random IV for every message, and then use the elements of that IV to encrypt each block of the message. Return the IV prepended to the output cipher
+            - Fully parallelizable
+            - CTR Mode is superior to CBC in every way
