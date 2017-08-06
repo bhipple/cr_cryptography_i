@@ -166,33 +166,89 @@ PRF, with only some neglibigle advantage
 Same test as before: Adversary -> input -> output -> can you tell the
 difference?
 
+That is, the challenger chooses either a truly random function f, or a PRF f
+with a fixed key k, and then the adversary submits q queries interacting with
+it, for as many q as he likes, and then must answer whether he was interacting
+with a random F or a PRF.
+
 ** Data Encryption Standard (DES)
+Block Cipher with a key length of 56-bits, block length of 64 bits, both of
+which resulted in it being broken by 1997. Replaced around 2000 by AES.
+
 16 round Feistel Network on 64-bit blocks (2 * 32)
 
 *** Feistel Network
-We map a 2n-bit input to a 2n-bit output
-=Ri = Fi(Ri-1) xor Li=, =Li = Ri-1 for i in [1..d]=, where =d= is
-the number of rounds
+We map a 2n-bit input to a 2n-bit output.
 
-The only difference between the encryption and decryption circuits is the order
-in which the functions are applied
+=Ri = Fi(Ri-1) xor Li=, =Li = Ri-1 for i in [1..d]=, where =d= is the number of
+rounds. Each =Li= goes on to feed =Ri+1= in the network, and vice versa.
+
+The right side just passes through to the left side of the next level, while the
+left side is applied to f_n(Right) and xor'd with the left side to produce
+the next right side.
+
+This network is invertible: the only difference between the encryption and
+decryption circuits is the order in which the functions are applied.
+
+Many block ciphers use feistel networks.
+
+Thm: (Luby-Rackoff '85)
+Let =f: K x {0,1}^n -> {0,1}^n= be a secure PRF. Then a 3-round Feistel
+network =F: K^3 x {0,1}^2n -> {0,1}^2n= is a secure PRP.
+
+*** How DES works
+The function =F(k_i, x)= is defined on a 32-bit x and a 48-bit k_i.
+There's a copying expansion that expands x to 48-bits, specified in the spec,
+and then the 48-bit expanded X is xor'd with the 48-bit k_i.
+
+We then break the result into 8 groups of 6 bits (S-boxes). Each S-box is a =f:
+{0,1}^6 -> {0,1}^4= function that maps 6 bits to 4 bits, with a lookup table.
+
+It is important to choose the S-Boxes carefully to avoid making the entire DES
+function linear, which would let us specify it entirely in a matrix
+multiplication.
+
+We then run the output from the S-boxes through a 32-bit permutation function.
 
 ** Exhaustive Search Attacks
 Goal: given input output pairs:
-=(m_i, c_i  E(k, m_i))= for =i = 1,..3=, find the key /k/
+=(m_i, c_i = E(k, m_i))= for =i = 1,..3=, find the key =k=
 
-3DES increases the space size to protect against exhaustive search.
+Lemma: Suppose DES is an ideal cipher (made up of 2^56 random invertible functions).
+Then for all m, c there is at most one key k such that =c = DES(k,m)=
+
+*** 3DES
+We define =3E: K^3 x M -> M= as =3E((k1,k2,k3), m) = E(k1, D(k2, E(k3,m)))=
+That is, we encrypt with the 3rd key, decrypt with the 2nd, and encrypt with the
+first. Notice if we set all 3 keys the same we end up with a DES implementation.
+
+3DES increases the space size to protect against exhaustive search by moving the
+key size up to 3x56 = 168 bits, at the cost of being 3x slower than DES.
 
 "Double" DES was not proposed because it is vulnerable to "meet in the middle"
 attacks.
+Say we have =E(k1, E(k2, M)) = C=. Then this is equivalent to =E(k2, M) = D(k1,
+C)=, by applying the decryption algorithm on each side.
+
+We can build a sorted table of all 2^56 possible values =E(k2, M)= for a message m.
+Then for each possible 2^56 key k1, we lookup to see if =D(k1, C)= is in the table,
+and if they are then we've found k1 and k2.
+
+*** DESX
+Let =E: K x {0,1}^n -> {0,1}^n= be a block cipher.
+Define EX as =EX((k1,k2,k3), m) = k1 xor E(k2, m xor k3)=
+
+Doesn't have 3x performance penalty, but has more subtle security vulnerabilities.
 
 ** More sophisticated attacks
-1. Side channel attacks
-2. Measuring the time to do enc/dec and the power while doing so can expose the key.
-3. Fault attacks
-4. Computing errors in the last round can expose the secrete key
-5. Linear and differential attacks
-6. Quantum attacks
+*** Side channel attacks
+Measuring time to enc/dec, power for enc/dec precisely. This can expose the secret key k.
+*** Fault attacks
+Computing errors in the last round can expose the secrete key
+*** Linear and differential attacks
+If the message and cipher text are at all correlated with any relation, we can
+determine some of the key bits.
+*** Quantum attacks
 
 ** Advanced Encyrption Standard (AES) Block Cipher
 *** Substitution-Permutation Network
@@ -200,32 +256,85 @@ Similar to Feistel Network, but all bits changed in every round (as opposed to
 half).
 
 Round: xor with round key, go through block substitution phase, permutation
-layer, repeat.
+layer, repeat. Fully reversible.
+
+For AES-128, it operates on a 4 byte x 4 byte (= 16 bytes = 128 bits) block,
+which is xor'd with each 16 byte round key, then run through invertible ByteSub,
+ShiftRow, and MixColumn functions. This is repeated for 10 rounds.
+
+Operates on a 128 bit (16 byte) key, which gets expanded to 11 x 16 = 176 bytes
+for all the key expansion.
+
+**** ByteSub
+A 1-byte S-Box with a 256 byte table. Applies the S-Box to each element in the 4x4 input cell.
+The S-Boxes are specified in such a way that they can be expanded via code or
+hard-wired as a lookup table, to give implementation options for speed vs. memory use.
+
+**** ShiftRows
+Cyclic shift on each row.
+
+**** MixColumns
+Apply a linear transformation to each column, independently applied.
 
 *** Code size vs. performance/security tradeoff
 Pre-compute the round function tables vs. calculate them as-needed.
+
+Intel/AMD have specific instructions in hardware for AES.
 
 ** Block Ciphers from PRGs
 GGM PRF: Let =G: K -> K^2=. Define =PRF F: K x {0,1}^n -> K= as the sequence of
 applying G to k and using either the left or right output depending on the ith
 bit of k.
 
-If G is a secure PRG, then F is a secure PRF on ={0,1}^n=. Not used in practice
-due to slow performance.
+We can recursively continue this process to take any PRG =G: K -> K^2= to create
+a PRF =F: K x {0,1}^n -> K= for any arbitrary n.
+
+Namely, if we have a PRG that doubles its output, we can use it to define a PRF
+of any arbitrary size.
+
+Not used in practice due to slow performance, though thanks to the Luby Rackoff
+Thm we can create an elegant PRP that's provably secure provided the underlying
+PRG is secure.
 
 *** Using Block Ciphers
 PRF Switching Lemma: Any secure PRP is also a secure PRF, if |X| is sufficiently
-large (~2\^128).
+large (~2^128).
 
 Let E be a PRP over =(K, X)=. Then for any q-eury adversary A, =|Adv_prf[A,E]
 -Adv_prp[A,E]| < q^2 / (2*|X|)=
 
+Example with a 1-bit X size, we have a 1/2 advantage (huge).
+
 **** One Time Key
-Deterministic Counter Mode: builds a stream cipher out of the block cipher.
+***** Electronic Code Book
+Terribly insecure but naive way to implement block cipher with a PRP.
+
+We take our PRP and our message, and break the message up into linear blocks with equal
+size as the PRP, then run each block through the cipher.
+
+Problem: if block =m1 = m2=, then cipher output block =c1 = c2=, which means an
+attacker gains knowledge about the message.
+
+An adversary has advantage 1.
+
+***** Deterministic Counter Mode
+Builds a stream cipher out of the block cipher.
+
+Given a PRF F and a message with L blocks, we evaluate =F(k, i)= for each i in [0, L],
+which creates a one-time pad, and then we xor the message with this sequence of PRF outputs
+to produce a cipher text.
+
+Thm: For any L > 0. if F is a secure PRF over (K, X ,X), then E_detctr is a
+semantically secure cipher over (K, X^L, X^L).
 
 **** Many-time Key
-Semantic security: adversary gets to mount a chosen-plaintext attack (CPA) in
-which he obtains the encryption of arbitrary messages of his choice.
+Applicable in filesystems or internet security, where the same key needs to be
+used to encrypt a number of files/packets.
+
+***** Semantic security in many-time key context with Chosen Plaintext Attacks
+Adversary gets to mount a chosen-plaintext attack (CPA) in which he submits two
+arbitrary messages of the same length, completely of his choice, and must
+determine if he got the encryption of m1 or m2.
 
 After getting back the first encrypted message, adversary can choose a new
 plaintext to query the challenger with and get the next encryption.
@@ -239,27 +348,62 @@ the attack has advantage 1.
 
 **** Randomized Encryption
 We use some random bits to influence the generator each time, and those bits are
-encoded into the cipher to make the decryption invertible.
+encoded into the cipher to make the decryption invertible. I.e., the cipher maps
+message m to one of any N points in a ball of output, and the decryption
+algorithm maps every point in that ball back to the message M.
 
 Solves our problem, but increases size of cipher.
+CipherText size = Plaintext Size + "# random bits" in our randomized encryption.
+
+Let =F: K x R -> M= be a secure PRF.
+Then for a given message m, define =E(k,m) = [r <- R, output (r, F(k,r) xor m)]=
+
+This is semantically secure under CPA provided R is large enough to never
+repeat.
 
 **** Nonce-based Encryption
+Define =E(k,m,n) = c=, and =D(k,c,n) = m=.
+
 (k, n) pair never repeats, so we get the effect of having new keys each time.
-The nonce need not be secret!
+The nonce need not be secret or even random; it just has to be unique!
+
+A simple counter works, provided it doesn't repeat with the same key. HTTPS uses
+this, and since the encrypter and decrypter keep the same state, we don't have
+to transfer the nonce over the wire.
+
+***** Semantic security
+The system must be secure when the nonces are chosen by the adversary; that
+said, the adversary must choose distinct nonces during the trial.
 
 **** Cipher Block Chaining with Random Initialization Vector (IV)
-For the ith message text, we use
-=c_i = (IV_i, E(k, m_i xor IV_i))=
+Let =(E,D)= by a PRP.  Define =E_cbc(k,m)= that chooses random IV in X and do:
+
+For the 0th cipher block, we emit =c_0 = E(k, m[0] xor IV)=
+For the ith cipher block, we emit =c_i = E(k, m[i] xor c_(i-1))=
+
+That is, the first block gets xor'd with the IV before going through E,
+and every other block gets xor'd with the previous output cipher block.
+
+There's a theorem that lets us compute how many blocks we can encrypt before we
+need to change key.
+
+Note that if the adversary can predict the IV that you will use, he can break
+semantic security. TLS 1.1 has this vulnerability and there are attacks based on
+it.
 
 **** Cipher Block Chaining with Nonce
 We take a nonce and a pair of keys =(k, k1)= and encrypt the nonce with =k1=,
-then use the algorithm as before with the encrypted nonce as our IV
+then use the algorithm as before with the encrypted nonce as our IV.
 
 Nonce must be unique: =(key, nonce)= pair is used for only one message
 
 **** Randomized Counter Mode
 Choose a random IV for every message, and then use the elements of that IV to
 encrypt each block of the message.
+
+For the ith message block m_i, we emit =c_i = E(k, (IV + i) xor m_i)=
+Because each cipher block is independent of everything except the initial
+randomly chosen IV, we can compute this in parallel.
 
 Return the IV prepended to the output cipher
 - Fully parallelizable
