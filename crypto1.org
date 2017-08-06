@@ -408,3 +408,139 @@ randomly chosen IV, we can compute this in parallel.
 Return the IV prepended to the output cipher
 - Fully parallelizable
 - CTR Mode is superior to CBC in every way
+
+* Week 3: Message Integrity
+Goal for this week is to provide integrity, without any confidentiality.
+
+This requires a shared secret key, since Mallory can change Alice's message and
+CRC simultaneously.
+
+** MACs: Message Authentication Codes
+Definition: MAC I = S(V) defined over (K, M, T) is a pair of algorithms:
+1. A signing algorithm S(k, m) that outputs t in T
+2. A verification algorithm V(k, m, t) outputs yes or no.
+
+such that for every key k in K, and for all m in M, V(k, m, S(k, m)) = "yes"
+(consistency requirement).
+
+*** Secure MACs
+Attacker gets a to mount a chosen message attack.
+
+For attacker-provided m1, m2, ..., mq attacker is given =t_i <- S(k, m_i)=
+
+Attacker's goal is existential forgery: produce some new valid message/tag pair (m,t)
+that is distinct from any (m_i, t_i)
+
+Same semantic security definition as before.
+
+*** MACs implemented with PRFs
+Let =F: K x X -> Y= be a secure PRF. Then we can define a MAC =I = (S,V)= as
+Signing: S(k,m) = F(k, m)
+Verifying: V(k,m,t) = if t = F(k,m) then "yes" else "no"
+
+THM: If =F: K x X -> Y= is a secure PRF and 1/|Y| is negligible, then I is a secure MAC.
+Proof: Adversary gets advantage 1/|Y| against a truly random F
+
+Since every secure PRF is a secure MAC, provided its output size is large
+enough, we can re-use ciphers like AES for 16-byte messages.
+
+Given this MAC for small messages, there are two common constructions for
+expanding this to messages of arbitrary length: CBC-MAC and HMAC.
+
+** Message Integrity Constructions
+*** CBC-MAC and NMAC
+Used in the Automated Clearing House (ACH).
+
+Encrypted CBC-MAC: run a CBC Chain block cypher with F(k1, .) for each block,
+and then a final cypher with F(k2, output) -> tag.
+
+Nested MAC:
+We break the message m up into blocks as before, and we start with an intial key k0.
+Starting from the first block and first key, we run F(k0, m0), and the output of this
+becomes k1 for the F(k1, m1), and so on.
+
+Then we pad t with fpad to get it at length of m block, use a new key, and do a final
+F(k, t) -> tag.
+
+Without the last encryption step, this is a "cascade" and vulnerable to extension attacks.
+
+**** Security theorems
+For any L > 0, for every efficient q-query PRF adv. A attacking F_ECBC or F_NMAC
+there exists an efficient adversary B such that
+
+Adv[A, F_ECBC] <= Adv[B, F] + 2q^2 / |X|
+Adv[A, F_NMAC] <= q * L * Adv[B, F] + q^2 / (2 *|K|)
+
+So after MACing ~2^48 messages with AES, we have to change our key in ECBC.
+
+That is, they're insecure after signing X^(1/2) messages with ECBC or K^(1/2)
+messages with NMAC.
+
+**** Extension Attacks
+For any two distinct messages m1, m2, if they have the same MAC, then m1 || w == m2 || w
+
+That is, if they collide on a tag, then their extensions will also collide.
+
+Birthday paradox attacks start becoming relevant if attacker can make many
+queries relative to the key space.
+
+*** MAC Padding
+If we just use a naive 0 pad, then the attacker obtains m||0 forgery after querying m.
+
+ISO pad standard: pad with 1000... Then we know to drop all the 0s and the first
+1 at the end of the message. If the message is a multiple of the block length
+initially, then we add a dummy 100000... block.
+
+**** CMAC
+NIST Standard for randomized padding function.
+Variant of CBC-MAC where key = (k, k1, k2)
+
+At the last step, if it's not aligned, we add a pad and xor with k1.
+If it's alligned, we xor with k2.
+
+The two distinct keys resolve the ambiguity between the "nicely aligned" vs.
+"not aligned but padded" cases.
+
+** PMAC and Carter-Wegman MAC
+The previous MAC functions weren't parallelizable.
+
+*** Parallel MAC (PMAC)
+For the ith block of the message, run a function P(k,i),
+xor the results with the message block, then run the results
+through F(k, m).  Do this for all messages, and finally run
+one more time for a tag (as before).
+
+Since P(k,i) does not depend on previous output and each
+F(k, P(k,i) xor m_i) does not depend on other m_i computations,
+we can fully parallelize this without subject ourselves to reordering
+attacks.
+
+**** Incremental Recomputation
+If k blocks change, we can update the tag in O(k) time.
+
+If 1 message block changes, we can recompute the tag by
+inverting the Final F(k1, tag), which results
+in an xor of many blocks, then we can xor out m_i and xor
+in m_i' and re-apply the tag generating function.
+
+
+*** One-time MAC
+In this construction, attacker only gets to send 1 message query.
+
+One-time MACs are generally faster than PRF-based MACs, and just as secure
+(though they can only be used once).
+
+Let q be a large prime, slightly larger than the block size.
+Let key = (k,a) be two random ints in [1,q]
+Let msg = (m1, m2, ..., mL) where each block is a 128 bit int
+
+Then S(key, msg) = P_msg(k) + a (mod q)
+where P_msg(x) = m[L] * x^L + ... + m[1]*x is a polynomial of degree L.
+
+*** Carter-Wegman MAC
+We can expand fast one-time MACs into many-time MACs with techniques that
+use the one-time fast MAC for the O(n) message, then a slower general
+MAC
+
+THM: CW((k1,k2), m) = (r, F(k1,r) xor S(k2,m))
+is a secure many-time MAC.
