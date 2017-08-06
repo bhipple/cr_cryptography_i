@@ -544,3 +544,163 @@ MAC
 
 THM: CW((k1,k2), m) = (r, F(k1,r) xor S(k2,m))
 is a secure many-time MAC.
+
+** Collision Resistance
+Let H: M -> T be a hash function, where |M| >> |T|.
+
+A collision for H is a distinct pair m0, m1 in M such that H(m0) = H(m1).
+
+A function H is collision resistant if for all explicit, efficient algorithms A,
+the Adv[A, H] = Pr[A outputs collision for H] is negligible.
+
+Example: sha256
+
+*** MACs from Collision Resitance
+Let I = (S,V) be a secure MAC for short messages over (K,M,T).
+Let H: M^big -> M.  Then I^big = (S^big, V^big) over (K, M^big, T) as
+S^big(k,m) = S(k, H(m)); V^big(k,m,t,) = V(k, H(m), t)
+is a secure MAC.
+
+That is, if we have a collision resistant hash function and a secure MAC
+for short messages, we have a MAC for big messages by using the hash to
+shorten the message first.
+
+E.g., S(k,m) = AES(k, SHA-256(m))
+
+*** Generic birthday attack
+Attack on collision resistance.
+
+Let H:M -> {0,1}^n be a hash function, where |M| >> 2^n.
+Then there exists a generic alg. to find a collision in time O(2^(n/2)) hashes.
+
+1. Choose 2^(n/2) distinct random messages in M
+2. For i = 1,...,2^(n/2) compute t_i = H(m_i)
+3. Look for a collision (t_i = t_j). If not found, go back to step 1
+
+Video contains a rigorous proof and discussion of the birthday paradox.
+
+*** Merkle-Damgard Paradigm for Constructing Collision Resistant Hash Functions
+Goal: Given a collision resistant hash for short messages, build a collision
+resistant hash for long messages.
+
+Given small-size-input collision resistant hash function =h: T x X -> T=,
+we obtain =H: X^(<=L) -> T= by:
+
+Break the message M up into blocks m0, m1, ..., mN.
+Starting with a fixed IV and m0, compute h(IV, m0).
+Then for m_i where i > 0, compute m_i = h(previous hash output, m_i)
+
+That is, we chain the output of the previous hash as the input to the next hash,
+along with the message.
+
+We end the message with a =1000000 || 64-bit msg length= number.
+This handles non-aligned messages and prevents extension attacks.
+
+
+THM: If h is collision resistant, then so is the Merkle-Damgard function H
+
+Proof: We will demonstrate that a collision on H implies a collision on h.
+Suppose H(M) = H(M').
+Let IV = H0, let H1, ..., Ht, H_t+1 = H(M)
+Let IV = H0', let H1', ..., Hr', H'_r+1 = H(M')
+
+Because H(M) = H(M'), then H_t+1 = H'_r+1
+
+H_t+1 = h(Ht, Mt || PB)
+H'_r+1 = h(Hr', Mr' || PB')
+
+If Ht != Hr', or Mt != Mr', or PB != PB', then we have a collision, and we're done.
+
+If all 3 of these are the same, then the lengths are the same (t = r) since the
+PB contains the length of the message, and we can continue down to the previous
+block.
+
+Ht = h(H_t-1, M_t-1) = H't = h(H'_t-1, M'_t-1)
+If H_t-1 != H'_t-1 or M_t-1 != M'_t-1, then we're done, because we have a compression
+function collision on h.
+
+Otherwise, we continue. Eventually, we will either find a difference, or we will
+get to the first block and will have proven that the entire messages are the
+same, which is also a contradiction.
+
+*** Building secure compression functions
+This section will construct the =h: T x X -> T= to give to the Merkle-Damgard
+construction H.
+
+We can build compression functions from block ciphers.
+
+THM: Let =E: K x {0,1}^n -> {0,1}^n= be an ideal block cipher (collection of |K|
+random permutations). Then for the Davies-Meyer compression function =h(H, m) =
+E(m, H) xor H=, it takes O(2^(n/2)) evaluations of (E,D) to find a collision
+=h(H,m) = h(H', m')=.
+
+Because the birthday attack demonstrates O(2^(n/2)) is the theoretical best-case
+performance for any hash, this means Davies-Meyer is optimal.
+
+**** SHA-256
+Merkle-Damgard function with a Davies-Meyer compression function using the
+SHACAL-2 block cipher.
+
+This involves a 256-block + 512-bit key => SHACAL-2 => 256-bit block.
+
+**** Provable compression functions
+Compressions built on number theory.
+
+Choose a random 2000-bit prime p and random 1 <= u, v <= p.
+For m,h in [0, p-1] define h(H,m) = u^H * v^m (mod p)
+
+Then finding a collision for h(.,.) is as hard as solving "discrete-log" modulo p,
+which is NP.
+
+** Hash-MAC (HMAC)
+A MAC from SHA-256 with a 256 bit output.
+
+Given an inner-pad ipad and outer-pad opad, and a key k, we run:
+HMAC: S(k, m) = H(k xor opad, H(k xor ipad || m))
+
+ipad and opad are fixed 512-bit constants specified in the HMAC standard.
+
+Similar to the NMAC PRF, but the two keys are dependent.
+
+** Timing attacks on MAC Verification
+Specifically, looking at the Keyczar python crypto library HMAC implementation.
+
+#+BEGIN_SRC python
+def verify(key, msg, sig_bytes):
+    return HMAC(key, msg) == sig_bytes
+#+END_SRC
+
+Problem: the comparator == is implemented by looping on the bytes, and exiting
+as soon as one of them is found to be different.
+
+Timing attack:
+1. Query server with random tag
+2. Loop over all possible first bytes and query server. Stop when verification
+   takes a little longer than in step 1.
+3. Repeat for all tag bytes until valid tag found
+
+Defense 1: make the comparison always take the same amount of time
+#+BEGIN_SRC python
+def verify(key, msg, sig_bytes):
+    # return false if sig_bytes has wrong length
+    result = 0
+    for x, y in zip(HMAC(key, msg), sig_bytes):
+        result |= ord(x) ^ ord(y)
+    return result == 0
+#+END_SRC
+
+Must ensure compiler optimizaiton doesn't mess you up!
+
+Another clever defense: prevent the attacker from knowing the values being compared
+#+BEGIN_SRC python
+def verify(key, msg, sig_bytes):
+    mac = HMAC(key, msg)
+    return HMAC(key, mac) == HMAC(key, sig_bytes)
+#+END_SRC
+
+Here, what we're doing is first computing the HMAC, then running that value
+through another HMAC, an drunning sig_bytes through HMAC, and comparing THOSE
+values. Byte-by-byte comparator will output false on first diff, but the adversary
+doesn't know the vlaues.
+
+Wasteful, but no danger of compiler optimization.
