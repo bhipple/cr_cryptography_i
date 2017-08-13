@@ -965,3 +965,109 @@ c <- [ FIV, E(k, 1^n xor FIV) ]
 Leads to significant attacks in practice.
 
 Counter mode with a fixed IV is also not deterministic CPA secure.
+
+*** Synthetic IV (SIV) and wide PRP
+https://www.coursera.org/learn/crypto/lecture/hM7f2/deterministic-encryption-siv-and-wide-prp
+This is what to do when you want deterministic encryption
+
+Let (E,D) be a CPA-Secure encryption: E(k, m; r) -> c
+Let F: K x M -> R be a secure PRF
+
+Define E_det((k1,k2), m) => r <- F(k1, m)
+                            c <- E(k2, m; r)
+                            output c
+
+Then E_det is semantically secure under deterministic chosen plaintext block.
+
+**** SIV ensures ciphertext integrity for free
+We want to build Deterministic Authenticated Encryption (DAE).
+
+Because the IV is generated from a Function that takes both the key and the
+message, the output of F is dependent on the message value. Once we decrypt the
+ciphertext with the IV, we can use the decrypted message + F + k1 to see if we
+would generate the same IV.
+
+**** Just using a PRP for DAE
+Let (E,D) be a secure PRP, E: K x X -> X
+
+THM: (E,D) is semantically secure under CPA.
+
+As a result, we can directly use AES for (non-integrity-based) CPA secure
+encryption for <= 16 byte messages.
+
+**** Wide block PRP
+If we have a larger msg space, we construct a wide block PRP.
+
+Let (E,D) be a secure PRP E: K x {0,1}^n -> {0,1}^n.
+Let EME be a PRP on {0,1}^N for N >> N
+
+How it works: key = (K, L)
+m <- mp xor mc
+
+We break our message x and break it into blocks, then xor each ith block with a padding function
+P(L, i).
+
+We xor all the Ps together, to form mp, then we encrypt to get mc.
+
+Then a lot more stuff happens. Come back to this if I need to.
+
+Takeaway: this is about 2x slower than SIV, but requires a constant factor less
+data, so it's good for very small messages.
+
+** Tweakable Encryption
+Disk encryption: sectors on disk are fixed size (e.g. 4KB), so we want encryption
+where we cannot expand the plaintext (i.e., M = C).
+
+Must use deterministic encryption, so there's no randomness since there's no
+room to store the randomness, and we can't have integrity, since there's nowhere
+to store a tag.
+
+Idea: use a different key for each sector, to avoid the leakage problem where
+identical plaintext sectors have the same ciphertext.
+
+Generate all the keys with k_t = PRF(k, t), where k is some master key, and then use key
+t to encrypt block t.
+
+*** Tweakable Block Ciphers
+Goal: construct many PRPs from a key k in K.
+
+E,D: K x T x X -> X
+where T is a tweak input from the tweak space.
+
+for every t in T and k in K, E(k,t,.) is an invertible function on X,
+indistinguishable from random.
+
+Application: use the sector number as the tweak.
+
+**** Trivial tweakable construction
+E_tweak(k, t, x) = E(E(k, t), x)
+i.e., we encrypt the tweak using our key, then encrypt the data using our resulting random key.
+
+Requires 2n evaluation of E(.,.)
+
+**** XTS Tweakable block cipher
+Let (E,D) be a secure PRP, E: K x {0,1}^n -> {0,1}^n
+XTS: E_tweak((k1, k2), (t, i), x) = N <- E(k2, t)
+                                    m xor P(n, i) where P is some lightweight padding function
+                                      => E(k1, .) xor P(N, i) -> c
+
+** Format Preserving Encryption (FPE)
+Comes up with encryption of credit card numbers.
+
+End-to-end encryption: we'd like to have the point-of-sale terminal encrypt the
+CC in a way that it looks like a valid credit card, then pass it through many
+middle-men, and have the receiving bank decrypt it.
+
+Given 0 < s <= 2^n, build a PRP on {0,...,s-1} from a secure PRF F: K x {0,1}^n -> {0,1}^n
+
+Steps:
+1. Shrink PRF from {0,1}^n to {0,1}^t, t < n, such that 2^(t-1) < s <= 2^t
+2. Luby-Rackoff with F': K x {0,1}^(t/2) -> {0,1}^(t/2)
+3. Given PRP (E,D): K x {0,1}^t -> {0,1}^t, we build (E',D'): K x {0,...s-1} -> {0,...,s-1}
+by doing on E'(k,x) for input x in {0,...,s-1} do:
+y <- x; do { y <- E(k,y) } until y in {0,...,s-1}; then output y
+
+That is, we have an encryption function, and we keep applying it until we get a
+value in our target set.
+
+Since 2^(t-1) < s <= 2^t, we will on average need 2 iterations for this process to converge.
