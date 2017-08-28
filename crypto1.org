@@ -1292,3 +1292,136 @@ If N = p*q for prime p and q, then phi(N) = N - p - q + 1 = (p-1) * (q-1)
 THM: For all x in Z_n*, x ^ ( phi(N) ) = 1 in Z_n
 
 Example: 5 ^ (phi(12)) = 5^4 = 625 = 1 in Z_12
+
+** Modular e'th roots
+https://www.coursera.org/learn/crypto/lecture/fjRVO/modular-e-th-roots
+We know how to solve modular linear equations
+a*x + b = 0 in Z_n.
+
+*** Definition of e'th root
+Let p be a prime and c in Z_p.
+Def: x in Z_p such that x^e = c in Z_p is called an e'th root of c.
+
+Example: The cube root of 7 in Z_11 is 6, since 6^3 = 18 = 7 Z_11.
+
+*** When does an e'th root exist
+
+**** Easy case: e coprime with p-1
+If gcd(e, p-1) = 1, then for al c in Z_p*, c^(1/e) exists in Z_p and is easy to find.
+
+Proof: Let d = e^(-1) in Z_(p-1), which exists because d is coprime with p-1.
+Then c^(1/e) = c^d in Z_p.
+
+**** Case e=2
+If p is an odd prime, then gcd(2, p-1) D.N.E. 1
+
+Def: x in Z_p is a quadratic residue (Q.R.) if it has a square root in Z_p.
+If p is an odd prime, then the number of Q.R. in Z_p is (p-1)/2 + 1
+
+The only elements that have a square root are the quadratic residue elements!
+
+**** Euler's Theorem
+THM: x in Z_p* is a Q.R. iff x^((p-1)/2) = 1 in Z_p
+
+**** Computing square roots mod p
+Suppose p = 3 (mod 4)
+
+Lemme: if c in Z_p is a Q.R. then c^(1/2) = c^((p+1)/4) in Z_p
+
+*** Solving quadratic equations mod p
+Give ax^2 + bx + c = 0 in Z_p,
+we can use the quadratic equation:
+
+x = (-b +/- (b^2 - 4ac)^(1/2)) / (2a) in Z_p
+
+We find (2a)^-1 in Z_p using extended Euclid
+
+We find the square root of (b^2 - 4ac) in Z_p if one exists
+using a square root algorithm
+
+
+*** Computing e'th roots mod N
+Let N be a composite number and e > 1
+When does c^(1/e) in Z_n exist?
+
+Answering these questions requires the factorization of N, as far as we know
+
+** Arithmetic Algorithms
+*** Representing bignums
+Representing an n-bit integer (e.g. n=2048) on a 64-bit machine is done by
+breaking it into n/32 blocks of 32 bits each, so that we can multiple two blocks
+of size 32 bits together and still represent it in a 64-bit processor.
+
+Given two n-bit integers, addition and subtraction are linear time
+
+Multiplication naively takes O(n^2). Karatsuba (1960) achived O(n^1.585) Even
+better algorithms can do O(n*log(n)), but with very very large constant factors
+that make it impractical in real world use.
+
+Division with remainder takes O(n^2)
+
+*** Exponentiation operations
+Given a finite cyclic group G (for example G = Z_p*), and given a generator g in
+G and x compute g^x.
+
+Repeated squaring algorithm.  Suppose x = 53 = 32 + 16 + 4 + 1 = (110101)_2
+
+Then g^53 = g^32 * g^16 * g^4 * g^1
+
+If we compute g^1 -> g^2 -> g^4 -> g^8 -> g^16 -> g^32 with repeated squaring,
+then we can use these numbers and get g^53 above with just a few multiplications.
+
+Implementation: input g in G and x > 0.
+Write x = (x_n, x_(n-1), ..., x_0)_2
+
+y <- g, z <- 1
+for i = 0 to n do:
+  if (x[i] == 1):  z <- z*y
+  y <- y^2
+output z
+
+Resulting runtime is O(n^3)
+
+** Intractable Problems
+
+*** Modulo primes: The Discrete Log problem
+Fix a large prime p>2 and g in Z_p* of order q.
+
+Consider the function: x -> g^x in Z_p
+This is easy to compute with repeated squaring.
+However, given g^x, finding x (the inverse) is the
+discrete log problem:
+
+Dlog_g(g^x) = x where x in {0, ..., q-2}
+
+**** More general DLOG
+Let G be a finite cyclic group and g a generator of G.
+G = { 1, g, g^2, ... , g^(q-1)}
+
+Def: We say the DLOG is hard in G if for all efficient alg. A:
+
+Given random g <- G, x <- Z_q, Pr[A(G,q,g,g^x) = x] < negligible
+
+Z_p* for large p is a group where DLOG is hard.
+Another group is the elliptic curve group mod p.
+
+**** Collision resistance application
+Choose a group G where DLOG is hard (e.g., Z_p* for large p)
+
+Let q = |G| be a prime. Choose generators g,h of G.
+
+For x,y in {1,...,q} define H(x,y) = g^x * h^y in G
+
+Lemma: finding collision for H(.,.) is as hard as computing Dlog_g(h).
+
+*** Hard problems with modular composites
+Consider the set of integers Z_2(n) := { N = p*q where p,q are n-bit primes }
+
+**** Factoring problem
+Factor a random N in Z_2(n)
+
+Best known algorithm (NFS) has run-time exp(n^(1/3)) for n-bit integer
+
+**** Polynomial roots
+Given a polynomial f(x) where degree(f) > 1 and a random N in Z_2(n),
+find x in Z_N s.t. f(x) = 0 in Z_n.
