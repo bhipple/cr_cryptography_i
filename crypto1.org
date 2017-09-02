@@ -1425,3 +1425,160 @@ Best known algorithm (NFS) has run-time exp(n^(1/3)) for n-bit integer
 **** Polynomial roots
 Given a polynomial f(x) where degree(f) > 1 and a random N in Z_2(n),
 find x in Z_N s.t. f(x) = 0 in Z_n.
+
+* Week 6: Public Key Encryption
+
+** Definitions and Security
+Notably, public-key encryption can be non-interactive if Alice can publish her
+public key somewhere.
+
+It can also be used for session setup, i.e. web browsing.
+
+DEF: A public-key encryption system is a triple of algs (G, E, D)
+- G(): randomized alg. outputs a key pair (pk, sk)
+- E(pk, m): randomized alg that takes m in M and outputs c in C
+- D(sk, c): deterministic alg that takes c in C and outputs m in M or bottom
+
+such that for all (pk,sk) output by G, and for all m in M, D(sk, E(pk,m)) == m
+(consistency property)
+
+*** Security against eavesdropping
+Standard experiment game with the adversary; adversary gets to send 1 message
+and get 1 cipher text back.
+
+Note that in public-key encryption, one-time security implies many-time security (CPA).
+This follows from the fact that the attacker can encrypt whatever he wants by himself.
+
+*** Chosen Ciphertext Security
+Enc = (G,E,D) public-key encryption over (M, C).  For b = 0,1 define EXP(b):
+
+Challenger gens (pk,sk) with G()
+Gives pk to adversary
+
+Chosen Ciphertext Attack phase 1: attacker can submit as many ciphertexts
+as he wants and get as many decrypted messages back.
+
+challenge: attacker submits m_0, m_1 and receives a cipher c_i
+
+CCA Phase 2: Attacker gets to submit as many ciphertexts as he wants again,
+provided they are not the cipher from the challenge phase.
+
+This implies Indistinguishability under a Chosen Ciphertext Attack (IND-CCA) or CCA Security.
+
+** Public key encryption from Trapdoor permutations
+Trapdoor function (TDF):
+DEF: A rapdoor func X -> Y is a triple of efficient algs (G, F, F^-1)
+- G() gen for (pk,sk)
+- F(pk, .) det alg that defines X -> Y
+- F^-1(sk, .) defines a function Y -> X that inverts F(pk, .)
+
+Namely, pk goes X -> Y, and sk inverts Y -> X
+
+(G, F, F^-1) is secure if F(pk, .) is a "one-way function", meaning it can be
+evaluated but cannot be inverted without sk.
+
+*** Building pub-key system with (G,F,F^-1)
+If we have a secure TDF X -> Y and a symmetric auth. encryption (E_s, D_s) defined over (K,M,C),
+and a H: X -> K hash function, we consruct a pub-key enc system (G,E,D):
+
+G is the same G for TDF
+
+E(pk, m) is:
+x <- X randomly,
+y <- F(pk, x),
+k <- H(x),
+c <- E_s(k,m)
+output (y,c)
+
+D(sk, (y,c)) is:
+x <- F^-1(sk, y),
+k <- H(x),
+m <- D_s(k, c)
+
+Essentially, the TDF is used to encrypt a random x, and then we use a normal encryption system.
+
+Security: If (G,F,F^-1) is a secure TDF, (E_s,D_s) provides auth. enc.,
+and H: X -> K is a "random oracle", then (G,E,D) is CCA secure
+
+In practice we'd use something like sha256 for H.
+
+** The RSA Trapdoor Permutation
+We use a trapdoor function, but have F(pk, .): X -> X as a permutation
+
+*** Review
+Let N = p*q where p, q are prime
+
+Z_n = {0,1,2,...,N-1}
+Z_n* = { invertible elements in Z_n }
+
+Facts:
+- x in Z_n is invertible iff gcd(x,N) = 1
+- Number of elements in Z_n* is phi(N) = (p-1)(q-1) = N - p - q + 1
+- phi(N) is close to N - 2*(n^(1/2)) which is close to N, so almost all
+- Thus almost all elements in Z_n are invertible
+
+Euler's Thm: For all x in Z_n*, x ^ (phi(N)) = 1
+
+*** History
+First published in 1977 in Scientific American
+
+Widely used in SSL/TLS certs, key exchange, email and filesystems, etc.
+
+Named for Rivest, Shamir, and Adleman
+
+*** Algorithm
+G(): choose random primes p,q on the order of 1024 bits. Set N = p*q
+Chose integers e,d s.t. e*d = 1 (mod phi(N))
+Output pk = (N, e), sk = (N, d)
+
+F(pk, x): Z_n* -> Z_n*; RSA(x) = x^e in Z_n
+
+F^-1(sk, y) = y^d; y^d = RSA(x)^d = x ^ (ed) = x ^ (k * phi(N) + 1) = (x ^ (phi(N)) ^ k) * x
+using Euler's Theorem
+
+*** The RSA Assumption: RSA is a one-way permutation
+For all efficient alg.s A:
+Pr[A(N,e,y) = y^(1/e) ] < negligible
+where p,q <- n-bit primes, N <- pq, y <- Z_n*
+
+*** Real-world pub-key encryption
+Plugigng RSA into the ISO std, we have a real pub key encryption system!
+
+(E_s, D_s): symmetric encryption scheme providing
+H: Z_n -> K whee K is key space of (E_s, D_s)
+
+
+G(): generate RSA params pk = (N,e), sk = (N,d)
+E(pk, m): 1. Choose random x in Z_n
+          2. y <- RSA(x) = x^e, k <- H(x), with H as sha256
+          3. output (y, E_s(k,m))
+D(sk, (y,c)): output D_s(H(RSA^-1(y)), c)
+
+
+*** Textbook RSA is insecure
+If we don't run through the has function, but instead directly use RSA to
+encrypt and decrypt with e and d, this is insecure!
+
+For starters, it's deterministic, but on top of that RSA is *only* a trapdoor
+permutation, not a full encryption system without the ISO standard.
+
+**** Sample attack with a website
+Browser -> Hello to Server
+Server -> (e,N) -> Browser, with server storing d locally
+Browser generates random session-key k, sends c = RSA(k) -> Server
+
+Suppose k is 64 bits.  Eve sees c = k^e in Z_n
+
+If k = k1 * k2, where k1, k2 < 2^34, then c / (k1 ^ e) = k2 ^ e in Z_n
+and now we can do a meet-in-the-middle attack.
+
+1. Build a table c/(1^e), c/(2^e), ... in time 2^34
+2. For k2 = 0, ..., 2^34, test if k2^e is in the table, in time 2^34
+
+Now we've found (k1,k2), can multiple them to get k, and completely break the
+encryption system.
+
+Total attack time takes much less time than the key size.
+
+
+** PKCS 1
