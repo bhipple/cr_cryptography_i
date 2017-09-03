@@ -1467,9 +1467,9 @@ This implies Indistinguishability under a Chosen Ciphertext Attack (IND-CCA) or 
 
 ** Public key encryption from Trapdoor permutations
 Trapdoor function (TDF):
-DEF: A rapdoor func X -> Y is a triple of efficient algs (G, F, F^-1)
+DEF: A trapdoor func X -> Y is a triple of efficient algs (G, F, F^-1)
 - G() gen for (pk,sk)
-- F(pk, .) det alg that defines X -> Y
+- F(pk, .) deterministic alg that defines X -> Y
 - F^-1(sk, .) defines a function Y -> X that inverts F(pk, .)
 
 Namely, pk goes X -> Y, and sk inverts Y -> X
@@ -1484,18 +1484,19 @@ and a H: X -> K hash function, we consruct a pub-key enc system (G,E,D):
 G is the same G for TDF
 
 E(pk, m) is:
-x <- X randomly,
-y <- F(pk, x),
-k <- H(x),
-c <- E_s(k,m)
-output (y,c)
+  x <- X randomly,
+  y <- F(pk, x),
+  k <- H(x),
+  c <- E_s(k,m)
+  output (y,c)
 
 D(sk, (y,c)) is:
-x <- F^-1(sk, y),
-k <- H(x),
-m <- D_s(k, c)
+  x <- F^-1(sk, y),
+  k <- H(x),
+  m <- D_s(k, c)
 
-Essentially, the TDF is used to encrypt a random x, and then we use a normal encryption system.
+Essentially, the TDF is used to encrypt a random x, and then we use a normal
+encryption system.
 
 Security: If (G,F,F^-1) is a secure TDF, (E_s,D_s) provides auth. enc.,
 and H: X -> K is a "random oracle", then (G,E,D) is CCA secure
@@ -1528,7 +1529,7 @@ Named for Rivest, Shamir, and Adleman
 
 *** Algorithm
 G(): choose random primes p,q on the order of 1024 bits. Set N = p*q
-Chose integers e,d s.t. e*d = 1 (mod phi(N))
+Choose integers e,d s.t. e*d = 1 (mod phi(N))
 Output pk = (N, e), sk = (N, d)
 
 F(pk, x): Z_n* -> Z_n*; RSA(x) = x^e in Z_n
@@ -1542,11 +1543,10 @@ Pr[A(N,e,y) = y^(1/e) ] < negligible
 where p,q <- n-bit primes, N <- pq, y <- Z_n*
 
 *** Real-world pub-key encryption
-Plugigng RSA into the ISO std, we have a real pub key encryption system!
+Plugging RSA into the ISO std, we have a real pub key encryption system!
 
 (E_s, D_s): symmetric encryption scheme providing
 H: Z_n -> K whee K is key space of (E_s, D_s)
-
 
 G(): generate RSA params pk = (N,e), sk = (N,d)
 E(pk, m): 1. Choose random x in Z_n
@@ -1602,7 +1602,6 @@ is some random value and continue on, to eventually fail since we'll have differ
 keys between client and server.
 
 *** PKCS1 v2.0: Optimal Asymmetric Encryption Padding (OAEP)
-
 Better way of doing RSA encryption that has chosen plaintext security
 
 THM: If RSA is a trap-door permutation, then RSA-OAEP is CCA secure when H,G are random oracles.
