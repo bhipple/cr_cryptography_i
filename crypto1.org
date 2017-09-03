@@ -142,7 +142,7 @@ Examples: 3DES and AES
 ** Building block ciphers
 Use iteration:
 1. The key is expanded into n keys
-2. The messages is encrypted by k "round functions" =R(k, m)= to produce the resulting cipher =c=
+2. The message is encrypted by k "round functions" =R(k, m)= to produce the resulting cipher =c=
 
 The specifications to a block cipher are the key expansion function, the round
 function, the key size, and the round count.
