@@ -1580,5 +1580,254 @@ encryption system.
 
 Total attack time takes much less time than the key size.
 
-
 ** PKCS 1
+In the real world, we don't often use the ISO standard
+
+In practice, we often give the RSA system a key rather than having it generate
+its own.
+
+So we have msg key -> preprocessing that expands a 128-bit AES key into the 2048
+bit key for RSA -> RSA algorithm -> ciphertext
+
+*** Attack on PKCS1 v1.5
+Attacker intercepts c
+We can send c to to server, and if the 16 MSB != '02', then the server will
+return a decryption error.  It turns out this is enough to fully decrypt the msg.
+
+Bleichenbacher (1998)
+
+*** Defense (RFC 5246)
+Minimum defense: if the plaintext doesn't begin with 02, we pretend the plaintext
+is some random value and continue on, to eventually fail since we'll have different
+keys between client and server.
+
+*** PKCS1 v2.0: Optimal Asymmetric Encryption Padding (OAEP)
+
+Better way of doing RSA encryption that has chosen plaintext security
+
+THM: If RSA is a trap-door permutation, then RSA-OAEP is CCA secure when H,G are random oracles.
+
+** Is RSA a one-way function?
+To invert RSA without d, attacker must compute
+x from c = x^e mod N
+
+Asking how hard is computing e'th roots modulo N?
+
+Best known algorithm:
+1. Factor N (hard)
+2. Compute e'th roots modulo p and q (easy)
+
+Unproven that any solution to RSA implies factoring, but is the state of the art
+
+*** How NOT to improve RSA performance
+Use small private key d (order 2^128)
+
+c^d = m mod N
+
+means fewer exponentiations
+
+**** Wiener's attack
+Wiener 1987 hows if d < N^(1/4), then RSA is extremely insecure.
+
+Remainder of video shows a lot of equation manipulation that results in
+broken RSA if d is small.
+
+** RSA in practice
+To speed up RSA encryption, use a small e: c = m ^ e mod n
+Minimum value is e=3, since we must have gcd(e, phi(N)) == 1
+Recommended value is e = 65537 = 2^16 + 1, which requires 17 multiplications for encryptions
+
+Asymmetry of RSA: fast encryption, slow decryption
+
+**** Implementaiton attacks
+Kocher 97: timing attack looking at the time it takes to compute c^d mod N to
+expose d
+
+Kocher 99: power attack: the power consumption of a smartcart while it is
+computing c^d (mod N) can expose d
+
+BDL 97 faults attack: a computer error during c^d (mod N) can expose d. Just 1
+error is sufficient during decryption to expose d. A common defense is to
+re-encrypt after decrypting, to make sure it matches the cipher. Since
+encryption is 10x faster than decryption, this is a 10% slowdown.
+
+**** Fault attack details
+decrypt mod p: x_p = c^d in Z_p
+decrypt mod q: x_q = c^d in Z_q
+Combine to get x = c^d in Z_n
+
+using chinese remainder theorem, which gives a ~4x speedup.
+
+If an error occurs on x_q but not x_p, then we'll get:
+x' = c^d in Z_p but x' != c^d in Z_q
+
+which now means gcd((x')^e - c, N) = p in Z_q, which means I have the
+factorization of N, which lets me easily compute phi(N), which lets me
+immediately compute the private key.
+
+** ElGamal Public Key System
+Used in GPG, based on the Diffie-Hellman protocol
+
+Fix a finite cyclic group G of order n
+Fix a generator g in G
+
+Alice choses A = g^a, for a  for a random a in {1,...,n}
+Alice publishes A as a public key
+
+Bob chooses a random b in {1,...,n} and computes g^(ab) = A^b
+to derive the symmetric key k.
+
+Bob sends ct = [ B = g^b, encrypt message m with k]
+
+Alice can decrypt by computing B^a = k and decrypting the ct.
+
+*** Formally
+G: Finite cyclic gorup of order n
+(E_s, D_s): symmetric auth. encryption defined over (K,M,C)
+H: G^2 -> K a hash function
+
+We construct a pub-key system (Gen, E, D):
+
+Key Gen: choose random generator g in G, and a random a in Z_n
+Output sk = a, pk = (g, h=g^a)
+
+E(pk=(g,h), m):
+  b <- Z_n
+  u <- g^b
+  v <- h^b
+  k <- H(u,v)
+  c <- E_s(k, m)
+  output (u,c)
+
+D(sk=a, (u,c)):
+  v <- u^a
+  k <- H(u,v)
+  m <- D_s(k,c)
+  output m
+
+*** Performance
+Encryption is 2 expoonentials:
+b <- Z_n, u <- g^b, v <- h^b
+
+Deryption requires one: v <- u^a
+
+u always changes, so decryption can't be improved, but in encryption we can
+pre-compute [ g^(2^i), h^(2^i) for i=1,...,log(n) ] and get a 3x speedup,
+provided we're repeatedly encrypting to the same public key.
+
+** ElGamal security
+Requires that given g, g^a, g^b, it is difficult to compute g^ab
+
+Computational Diffie-Hellman Assumption (CDH)
+
+Hash Diffie-Hellman Assumption:
+G: finite cyclic group of order n
+H: G^2 -> K a nash function
+
+Def: Hash-DH (HDH) assumption holds for (G,H) if:
+(g,g^a,g^b, H(g^b, g^(ab)) is equiv to (g, g^a, g^b, R)
+where g <- { generators of G}, a,b <- Z_n, R <- K
+
+ElGamal is semantically secure under Hash-DH
+
+We can prove chosen-ciphertext security with the Interactive DH assumption
+with a random oracle hash function
+
+*** With better security analysis
+We can use a group G where CDH = IDH (bilinear group), which involves some
+elliptic curve groups.
+
+We can also change to Twin ElGamal variation:
+KeyGen: g <- {generators of G}, a1, a2 <- Z_n
+
+output pk = (g, h1 = g^a1, h2 = g^a2), sk = (a1,a2)
+
+E(pk=(g,h1,h2), m):
+  b <- Z_n
+  k <- H(g^b, h1^b, h2^b)
+  c <- E_s(k,m)
+  output (g^b, c)
+
+D(sk=(a1,a2), (u,c)):
+  k <- H(u, u^a1, u^a2)
+  m <- D_s(k,c)
+  output m
+
+This construct is provably CCA secure based only on the CDH assumption.
+Unknown if this is really worth it or not.
+
+*** ElGamal security without a random oracle hash function
+Very active area of research in the last decade.
+
+CHK'04 and BB'04 use bilinear groups with special elliptic curves.
+
+CS'98 shows a construction with the Decision-DH assumption
+
+** A Unifying Theme
+Both RSA's trapdoors and Diffie-Hellman follow from one-way functions.
+
+f: X -> Y is one-way if:
+ - There is an efficient algorithm to evaluate f(.),
+ - Computing f^(-1) is hard: for all efficient A and x <- X,
+   Pr [ A(f(x)) ] < negligible, i.e. f(A(f(x))) != f(x)
+
+In general, public key crypto requires one-way functions with special
+homomorphic properties and things like trapdoors.
+
+*** Generic one-way funcitons
+Let f: X -> Y be a secure PRG, where |Y| >> |X|, e.g. f built using
+deterministic counter mode.
+
+Lemma: If f is a secure PRG, then f is one-way.
+
+No special properties, so not suited for crypto.
+
+*** The DLOG one-way function
+Fix a finite cyclic gorup G (e.g. G = Z_p*) of order n.
+Let g be a random generator in G
+
+Define: f: Z_n -> G as f(x) = g^x in G
+
+Lemma: If DLOG is hard in G, then f is one-way.
+
+Additive Property: Given f(x), f(y), we can compute f(x+y) without having x or y
+by f(x+y) = f(x)*f(y) = g^(x+y), which enables public key cryptography
+
+*** The RSA one-way function
+Choose random primes p,q =~ 1024 bits, set N=pq
+Choose integers e,d s.t. e*d = 1 (mod phi(N))
+
+Define: f: Z_n* -> Z_n* as f(x) = x ^ e in Z_n
+
+Lemma: f is one-way under the RSA assumption
+
+Multiplicative Property: f(x*y) = f(x) * f(y), and f has a trapdoor that lets us
+invert the function with a secret key.
+
+** Summary of material covered
+Primitives:
+PRGs, stream ciphers
+PRF, PRP, with CTR mode and GGM construction to make block ciphers from PRGs
+
+MACs like CMAC, HMAC, PMAC, and collision resistance
+
+Authenticated encryption
+
+Key exchange, pub key crypto, trapdoor functions and Diffie-Hellman groups
+
+*** Remaining topics in part II
+- Digital signatures and certs
+- Authenticated key exchange
+- User authentication: pw, one-time pw, challenge-response
+- Privacy mechanisms
+- Zero-knowledge protocols
+
+*** Futher reading
+- Elliptic curve crypto
+- Quantum computing
+- New key management paradigms
+- Anonymous digital cash
+- Private voting and auction
+- Fully homomorphic encryption
+- Lattice-based crypto
+- Two party and multi-party computation
